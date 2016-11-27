@@ -7,6 +7,8 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern
 from .helpers import (UtilityFunction, PrintLog, acq_max, ensure_rng)
 from .target_space import TargetSpace
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 class BayesianOptimization(object):
@@ -45,11 +47,13 @@ class BayesianOptimization(object):
         self.i = 0
 
         # Internal GP regressor
-        self.gp = GaussianProcessRegressor(
-            kernel=Matern(nu=2.5),
-            n_restarts_optimizer=25,
-            random_state=self.random_state
-        )
+        self.gp = Pipeline(steps=[
+            ('scaler', StandardScaler()),
+            ('svc', GaussianProcessRegressor(
+                kernel=Matern(nu=2.5),
+                n_restarts_optimizer=25,
+            ))
+        ])
 
         # Utility Function placeholder
         self.util = None
