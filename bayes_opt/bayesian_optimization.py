@@ -3,6 +3,7 @@ from __future__ import division
 
 import numpy as np
 import warnings
+from functools import partial
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern
 from .helpers import (UtilityFunction, PrintLog, acq_max, ensure_rng)
@@ -49,11 +50,19 @@ class BayesianOptimization(object):
         # Internal GP regressor
         self.gp = Pipeline(steps=[
             ('scaler', StandardScaler()),
-            ('svc', GaussianProcessRegressor(
+            ('gp', GaussianProcessRegressor(
                 kernel=Matern(nu=2.5),
                 n_restarts_optimizer=25,
             ))
         ])
+
+        def gp_predict(X, return_std=False):
+            return self.gp.named_steps['gp'].predict(
+                X = self.gp.named_steps['scaler'].transform(X),
+                return_std = return_std
+            )
+
+        self.gp.predict = gp_predict
 
         # Utility Function placeholder
         self.util = None
@@ -321,7 +330,6 @@ class BayesianOptimization(object):
 
         :return: None
         """
-
         points = np.hstack((self.space.X, np.expand_dims(self.space.Y, axis=1)))
         header = ', '.join(self.space.keys + ['target'])
         np.savetxt(file_name, points, header=header, delimiter=',')
