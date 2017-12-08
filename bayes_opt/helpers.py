@@ -44,6 +44,7 @@ def acq_max(ac, gp, y_max, bounds, random_state):
     # Explore the parameter space more throughly
     x_seeds = random_state.uniform(bounds[:, 0], bounds[:, 1],
                                 size=(250, bounds.shape[0]))
+
     for x_try in x_seeds:
         # Find the minimum of minus the acquisition function
         res = minimize(lambda x: -ac(x.reshape(1, -1), gp=gp, y_max=y_max),

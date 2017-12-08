@@ -7,6 +7,62 @@ from sklearn.gaussian_process.kernels import Matern
 from .helpers import UtilityFunction, unique_rows, PrintLog, acq_max
 
 
+def constrainted_uniform(lower, upper, size, constraints,
+                         random_state=np.random):
+    """
+    Example:
+        >>> bounds = np.array([[0, 10], [0, 10]])
+        >>> def cons1(data):
+        >>>     # model constraint x <= y (true is any non-negative value)
+        >>>     x, y = data
+        >>>     return y - x
+        >>> constraints = [
+        >>>     {'type': 'leq', 'fun': cons1}
+        >>> ]
+        >>> lower = bounds[:, 0]
+        >>> upper = bounds[:, 1]
+        >>> size = (3, bounds.shape[0])
+        >>> random_state = np.random.RandomState(0)
+        >>> constrainted_uniform(lower, upper, size, constraints, random_state)
+        array([[ 4.37587211,  8.91773001],
+               [ 6.02763376,  5.44883183],
+               [ 5.68044561,  9.25596638]])
+    """
+    def satisfied(cons, x_try):
+        if cons['type'] == 'eq':
+            return cons['fun'](x_try) == 0
+        elif cons['type'] == 'leq':
+            return cons['fun'](x_try) >= 0
+        else:
+            raise ValueError(cons['type'])
+
+    # Initial random sample
+    x_seeds = random_state.uniform(lower, upper, size=size)
+    unsatisfied_idx, = np.where(
+        [all(satisfied(cons, x_try) for cons in constraints)
+                     for x_try in x_seeds])
+
+    # Reject and resample until everything is satisfied
+    max_iters = min(100, (2 * size[0]) ** 2)
+    n_iters = 0
+    while len(unsatisfied_idx) > 0:
+        if n_iters > max_iters:
+            raise RuntimeError('took too long to find good points')
+        n_invalid = len(unsatisfied_idx)
+        new_size = (n_invalid,) + tuple(size[1:])
+        new_seeds = random_state.uniform(lower, upper, size=new_size)
+
+        needs_resample = [
+            not all(satisfied(cons, x_try) for cons in constraints)
+            for x_try in new_seeds
+        ]
+
+        x_seeds[unsatisfied_idx] = new_seeds
+        unsatisfied_idx = unsatisfied_idx[needs_resample]
+        n_iters += 1
+    return x_seeds
+
+
 class BayesianOptimization(object):
 
     def __init__(self, f, pbounds, random_state=None, verbose=1):
@@ -20,6 +76,21 @@ class BayesianOptimization(object):
 
         :param verbose:
             Whether or not to print progress.
+
+        :param constraints:
+            Tuple containing constraint dictionaries, each of the form {'type':x, 'fun':y}
+            where x is one of "eq" or "ineq" and y is a functinal form of the constraint.
+
+
+            def objective(x):
+                return x[0] * x[1]
+
+            random_state = np.random
+            x_seeds = random_state.uniform(bounds[:, 0], bounds[:, 1],
+                                           size=(250, bounds.shape[0]))
+
+
+
 
         """
         # Store the original dictionary
@@ -249,6 +320,14 @@ class BayesianOptimization(object):
 
         :param acq:
             Acquisition function to be used, defaults to Upper Confidence Bound.
+
+        :param kappa:
+            Used by the ucb acquisition function. Smaller values prefer
+            exploitation. Larger values prefer exploration.
+
+        :param xi:
+            Used by the er and poi acquisition functions. Smaller values prefer
+            exploitation. Larger values prefer exploration.
 
         :param gp_params:
             Parameters to be passed to the Scikit-learn Gaussian Process object
