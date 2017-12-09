@@ -220,6 +220,10 @@ class BayesianOptimization(object):
         :param gp_params:
             Parameters to be passed to the Scikit-learn Gaussian Process object
 
+        :param scaler:
+            If True uses sklearn standard scaler to normalize inputs before
+            fitting the Gaussian Process
+
         Returns
         -------
         :return: Nothing
@@ -250,32 +254,32 @@ class BayesianOptimization(object):
 
         # Add scaler
         if scaler:
-            self.pipeline = Pipeline(steps=[
+            pipeline = Pipeline(steps=[
                 ('scaler', StandardScaler()),
                 ('gp', self.gp)
             ])
         else:
-            self.pipeline = Pipeline(steps=[
+            pipeline = Pipeline(steps=[
                 ('gp', self.gp)
             ])
 
         def pipeline_predict(X, return_std=False):
             try:
-                X = self.pipeline.named_steps['scaler'].transform(X)
+                X = pipeline.named_steps['scaler'].transform(X)
             except KeyError:
                 pass
 
-            return self.pipeline.named_steps['gp'].predict(X=X, return_std=return_std)
+            return pipeline.named_steps['gp'].predict(X=X, return_std=return_std)
 
         # implements custom predict to allow return_std flag
-        self.pipeline.predict = pipeline_predict
+        pipeline.predict = pipeline_predict
 
         # Find unique rows of X to avoid GP from breaking
-        self.pipeline.fit(self.space.X, self.space.Y)
+        pipeline.fit(self.space.X, self.space.Y)
 
         # Finding argmax of the acquisition function.
         x_max = acq_max(ac=self.util.utility,
-                        gp=self.pipeline,
+                        gp=pipeline,
                         y_max=y_max,
                         bounds=self.space.bounds,
                         random_state=self.random_state,
@@ -304,7 +308,7 @@ class BayesianOptimization(object):
                 self.plog.print_step(x_max, y, pwarning)
 
             # Updating the GP.
-            self.pipeline.fit(self.space.X, self.space.Y)
+            pipeline.fit(self.space.X, self.space.Y)
 
             # Update the best params seen so far
             self.res['max'] = self.space.max_point()
@@ -317,7 +321,7 @@ class BayesianOptimization(object):
 
             # Maximize acquisition function to find next probing point
             x_max = acq_max(ac=self.util.utility,
-                            gp=self.pipeline,
+                            gp=pipeline,
                             y_max=y_max,
                             bounds=self.space.bounds,
                             random_state=self.random_state,

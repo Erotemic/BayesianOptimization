@@ -109,6 +109,44 @@ def test_explore_eager():
     assert max_val == f.max()
 
 
+def test_scaler():
+    # Create domain with very different scales
+    x1s = np.linspace(-2, 10, 100)
+    x2s = np.linspace(-2, 10, 10000)
+
+    def f(xs):
+        return np.exp(-(xs - 2)**2) + np.exp(-(xs - 6)**2 / 10) + 1 / (xs**2 + 1)
+
+    f1 = f(x1s)
+    f2 = f(x2s)
+
+    def target_func(x1, x2):
+        return f1[int(x1)] + f2[int(x2)]
+
+    pbounds = {
+        'x1': (0, len(f1) - 1),
+        'x2': (0, len(f2) - 1),
+    }
+
+    gp_params = {'alpha': 1e-5, 'n_restarts_optimizer': 2}
+
+    random_state = ensure_rng(0)
+    bo2 = BayesianOptimization(f=target_func,
+                               pbounds=pbounds,
+                               random_state=random_state,
+                               verbose=0)
+    # Change aquisition params to speedup optimization for testing purposes
+    bo2._acqkw['n_iter'] = 5
+    bo2._acqkw['n_warmup'] = 1000
+    bo2.maximize(init_points=10, n_iter=5, acq='ucb', kappa=5, scaler=True,
+                 **gp_params)
+    res = bo2.space.max_point()
+    max_val2 = res['max_val']
+
+    ratio = max_val2 / (f1.max() + f2.max())
+    assert ratio > .7, 'got {}. should get at least 70% of max'.format(ratio)
+
+
 if __name__ == '__main__':
     r"""
     CommandLine:
